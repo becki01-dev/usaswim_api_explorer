@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>USA Swimming API Explorer</title>
+<style>
+  :root {
+    --bg: #f5f5f5; --card: #fff; --text: #222; --muted: #666;
+    --accent: #1a73e8; --border: #ddd; --code-bg: #f0f0f0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a2e; --card: #222240; --text: #e0e0e0; --muted: #999;
+      --accent: #5b9eff; --border: #333; --code-bg: #1e1e3a;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font: 14px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--text);
+         max-width: 960px; margin: 0 auto; padding: 20px; }
+  h1 { font-size: 1.4em; margin-bottom: 4px; }
+  .sub { color: var(--muted); font-size: .9em; margin-bottom: 20px; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+           padding: 16px; margin-bottom: 16px; }
+  .panel h2 { font-size: 1em; margin-bottom: 8px; }
+  label { display: block; font-weight: 600; margin-bottom: 4px; font-size: .85em; }
+  input, button { font: inherit; padding: 6px 12px; border-radius: 4px; }
+  input { border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  #mid { width: 240px; }
+  button { border: none; background: var(--accent); color: #fff; cursor: pointer;
+           margin-left: 8px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .flex { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .status { font-size: .85em; color: var(--muted); min-height: 1.4em; }
+  .status.err { color: #e05050; }
+  .status.ok { color: #1a8a3f; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px;
+        padding: 12px; overflow-x: auto; font: 12px/1.4 "JetBrains Mono", "Fira Code", monospace;
+        white-space: pre-wrap; word-break: break-all; max-height: 500px; overflow-y: auto; }
+  .chip { display: inline-block; background: #e8f0fe; color: #1a56db; border-radius: 12px;
+          padding: 2px 10px; font-size: .8em; margin: 2px; cursor: pointer; border: none; }
+  .chip:hover { background: #d2e3fc; }
+  .chip.selected { background: var(--accent); color: #fff; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+  summary { cursor: pointer; color: var(--accent); font-size: .9em; }
+  code { background: var(--code-bg); padding: 1px 4px; border-radius: 3px; font-size: .9em; }
+  .dim { font-size: .8em; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>USA Swimming API Explorer</h1>
+<p class="sub">Live browser calls to the public Times API. No login required.</p>
+
+<div class="panel">
+  <h2>Member ID</h2>
+  <div class="flex">
+    <label>ID <input id="mid" type="text" placeholder="e.g. 9688AB9C4AFF4B"
+           autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+    <button id="go" type="button">Look up</button>
+  </div>
+  <p class="status" id="s1"></p>
+</div>
+
+<div class="panel">
+  <details id="phase1-details">
+    <summary><h2 style="display:inline;font-size:1em">Phase 1 — GET /GetBestTimesForMember/{id}</h2></summary>
+    <div style="margin-bottom:4px;">
+      <span class="status" id="p1-status"></span>
+    </div>
+    <pre id="phase1-body">—</pre>
+  </details>
+  <p class="chips" id="event-chips"></p>
+</div>
+
+<div class="panel">
+  <details id="phase2-details">
+    <summary><h2 style="display:inline;font-size:1em">Phase 2 — POST /BestTimes (click an event ↑)</h2></summary>
+    <div style="margin-bottom:4px;">
+      <span class="status" id="p2-status"></span>
+    </div>
+    <pre id="phase2-body">—</pre>
+  </details>
+</div>
+
+<details style="margin-top:24px;font-size:.85em;color:var(--muted);">
+  <summary>Device-Id override (only needed for local dev; GitHub Pages works out of the box)</summary>
+  <div style="display:flex;gap:8px;margin-top:8px;">
+    <input id="did-override" type="text" placeholder="Paste Device-Id…" spellcheck="false"
+           style="flex:1;font-family:monospace;font-size:.8em;">
+    <button id="did-save" type="button" style="font-size:.8em;">Save</button>
+    <button id="did-clear" type="button" style="font-size:.8em;background:#888;">Clear</button>
+  </div>
+  <p class="dim" id="did-msg" style="margin-top:4px;"></p>
+</details>
+
+<script>
+var API = "https://times-api.usaswimming.org/swims/TimesSearch";
+var DEFAULT_DID = "cGxhdGZvcm0gLSBcGxhd2ZWbmRvciAtIHVua25vd24gLSAxNzUxNzI0MDAwMDAwMA==";
+
+function getDeviceId() {
+  return (localStorage.getItem("usas-did") || "").trim() || DEFAULT_DID;
+}
+
+function buildHeaders() {
+  return {
+    "AppName": "DataHub",
+    "Usas-Sub-Id": "Anonymous",
+    "Device-Id": getDeviceId(),
+    "Content-Type": "application/json"
+  };
+}
+
+// --- Device-Id override (collapsed, only for local dev) ---
+(function() {
+  var inp = document.getElementById("did-override");
+  var msg = document.getElementById("did-msg");
+  inp.value = localStorage.getItem("usas-did") || "";
+  if (inp.value) msg.textContent = "Using saved override ✓";
+  document.getElementById("did-save").onclick = function() {
+    var v = inp.value.trim();
+    if (v) { localStorage.setItem("usas-did", v); msg.textContent = "Override saved ✓"; }
+  };
+  document.getElementById("did-clear").onclick = function() {
+    localStorage.removeItem("usas-did");
+    inp.value = "";
+    msg.textContent = "Cleared — using default.";
+  };
+})();
+
+// --- API calls ---
+var mid = document.getElementById("mid"), go = document.getElementById("go"),
+    s1 = document.getElementById("s1"),
+    p1d = document.getElementById("phase1-details"),
+    p1b = document.getElementById("phase1-body"),
+    p1s = document.getElementById("p1-status"),
+    p2d = document.getElementById("phase2-details"),
+    p2b = document.getElementById("phase2-body"),
+    p2s = document.getElementById("p2-status"),
+    chips = document.getElementById("event-chips");
+
+function status(el, msg, cls) {
+  el.textContent = msg;
+  el.className = "status" + (cls ? " " + cls : "");
+}
+
+async function fetch1(id) {
+  status(s1, "Fetching events…");
+  status(p1s, "");
+  p1d.open = true;
+  p1b.textContent = "Loading…";
+  p2b.textContent = "—";
+  chips.innerHTML = "";
+  p2d.open = false;
+
+  var url = API + "/GetBestTimesForMember/" + encodeURIComponent(id.trim());
+  var hdrs = buildHeaders();
+
+  try {
+    var r = await fetch(url, { headers: hdrs });
+    var text = await r.text();
+    var detail = "HTTP " + r.status + " — " + url + "\n\nRequest headers:\n" +
+      JSON.stringify(hdrs, null, 2) + "\n\nResponse:\n" + text;
+    p1b.textContent = detail;
+    if (!r.ok) {
+      status(p1s, "HTTP " + r.status, "err");
+      status(s1, "Request failed — see response below", "err");
+      return;
+    }
+    var data = JSON.parse(text);
+    status(p1s, r.status + " OK · " + (Array.isArray(data) ? data.length + " entries" : "non-array response"), "ok");
+    status(s1, (Array.isArray(data) ? data.length : 0) + " event entries found");
+    if (!Array.isArray(data) || !data.length) return;
+
+    // deduplicate and show chips
+    var seen = {};
+    data.forEach(function(e) {
+      var k = e.distance + " " + (e.strokeAbbreviation || "?");
+      if (seen[k]) return; seen[k] = true;
+      var btn = document.createElement("button");
+      btn.className = "chip"; btn.textContent = k;
+      btn.onclick = function() { fetch2(id.trim(), e.distance, e.strokeAbbreviation, btn); };
+      chips.appendChild(btn);
+    });
+  } catch (e) {
+    p1b.textContent = "Network error: " + e.message +
+      "\n\n(This usually means CORS blocked the request, or the network is down.)" +
+      "\nRequest URL: " + url;
+    status(p1s, e.message, "err");
+    status(s1, e.message, "err");
+  }
+}
+
+async function fetch2(mid, dist, stroke, btn) {
+  p2d.open = true;
+  p2b.textContent = "Loading…";
+  status(p2s, "");
+  if (document.querySelector(".chip.selected")) document.querySelector(".chip.selected").classList.remove("selected");
+  btn.classList.add("selected");
+
+  var hdrs = buildHeaders();
+  var body = JSON.stringify({memberId: mid, distance: dist, strokeAbbreviation: stroke});
+  var url = API + "/BestTimes";
+
+  try {
+    var r = await fetch(url, { method: "POST", headers: hdrs, body: body });
+    var text = await r.text();
+    var detail = "HTTP " + r.status + " — " + url +
+      "\n\nRequest headers:\n" + JSON.stringify(hdrs, null, 2) +
+      "\n\nRequest body:\n" + body +
+      "\n\nResponse:\n" + text;
+    p2b.textContent = detail;
+    if (!r.ok) {
+      status(p2s, "HTTP " + r.status, "err");
+      return;
+    }
+    var data = JSON.parse(text);
+    status(p2s, r.status + " OK · " + (Array.isArray(data) ? data.length + " rows" : "non-array response"), "ok");
+    if (Array.isArray(data)) {
+      data.forEach(function(row) {
+        if (row.meetName) {
+          p2d.querySelector("summary h2").textContent =
+            "Phase 2 — " + (row.fullName || "?") + " · " + row.distance + " " + row.strokeAbbreviation +
+            " (" + data.length + " results)";
+          return;
+        }
+      });
+    }
+  } catch (e) {
+    p2b.textContent = "Network error: " + e.message +
+      "\n\nRequest URL: " + url + "\nRequest body: " + body;
+    status(p2s, e.message, "err");
+  }
+}
+
+go.onclick = function() { var v = mid.value.trim(); if (v) fetch1(v); };
+mid.onkeydown = function(e) { if (e.key === "Enter") go.click(); };
+
+// auto-lookup if ?id=... in URL
+(function() {
+  var m = /[?&]id=([^&]+)/.exec(location.search);
+  if (m) { mid.value = decodeURIComponent(m[1]); fetch1(m[1]); }
+})();
+</script>
+</body>
+</html>
