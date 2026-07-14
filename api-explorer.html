@@ -83,23 +83,25 @@
   </details>
 </div>
 
-<details style="margin-top:24px;font-size:.85em;color:var(--muted);">
-  <summary>Device-Id override (only needed for local dev; GitHub Pages works out of the box)</summary>
-  <div style="display:flex;gap:8px;margin-top:8px;">
-    <input id="did-override" type="text" placeholder="Paste Device-Id…" spellcheck="false"
+<div class="panel" id="did-panel">
+  <h2>Device-Id <span class="dim">(required — not included in source)</span></h2>
+  <div style="display:flex;gap:8px;">
+    <input id="did-override" type="password" placeholder="Paste your Device-Id from Data Hub…" spellcheck="false"
            style="flex:1;font-family:monospace;font-size:.8em;">
-    <button id="did-save" type="button" style="font-size:.8em;">Save</button>
-    <button id="did-clear" type="button" style="font-size:.8em;background:#888;">Clear</button>
+    <button id="did-save" type="button">Save</button>
+    <button id="did-clear" type="button" style="background:#888;">Clear</button>
   </div>
-  <p class="dim" id="did-msg" style="margin-top:4px;"></p>
-</details>
+  <p class="dim" id="did-msg" style="margin-top:6px;"></p>
+  <p class="dim" style="margin-top:4px;">
+    Get yours: open <a href="https://data.usaswimming.org/" target="_blank" rel="noopener">Data Hub</a>
+    → F12 → Network → filter <code>times-api</code> → open any athlete → copy <code>Device-Id</code> header.
+  </p>
+</div>
 
 <script>
 var API = "https://times-api.usaswimming.org/swims/TimesSearch";
-var DEFAULT_DID = "cGxhdGZvcm0gLSBcGxhd2V5kb3IgLSB1bmtub3duIC0gMTc1MTcyNDAwMDAwMA==";
-
 function getDeviceId() {
-  return (localStorage.getItem("usas-did") || "").trim() || DEFAULT_DID;
+  return (localStorage.getItem("usas-did") || "").trim();
 }
 
 function buildHeaders() {
@@ -111,20 +113,31 @@ function buildHeaders() {
   };
 }
 
-// --- Device-Id override (collapsed, only for local dev) ---
+// --- Device-Id ---
 (function() {
   var inp = document.getElementById("did-override");
   var msg = document.getElementById("did-msg");
-  inp.value = localStorage.getItem("usas-did") || "";
-  if (inp.value) msg.textContent = "Using saved override ✓";
+  var saved = localStorage.getItem("usas-did") || "";
+  inp.value = saved;
+  if (saved) { msg.textContent = "✓ Device-Id configured — ready to use"; msg.className = "dim"; }
+  else { msg.textContent = "⚠ No Device-Id set — Lookup will fail"; msg.className = "dim"; msg.style.color = "#e05050"; }
+
+  function updateMsg() {
+    if (localStorage.getItem("usas-did")) {
+      msg.textContent = "✓ Device-Id saved"; msg.className = "dim"; msg.style.color = "";
+    } else {
+      msg.textContent = "⚠ No Device-Id set — Lookup will fail"; msg.className = "dim"; msg.style.color = "#e05050";
+    }
+  }
+
   document.getElementById("did-save").onclick = function() {
     var v = inp.value.trim();
-    if (v) { localStorage.setItem("usas-did", v); msg.textContent = "Override saved ✓"; }
+    if (v) { localStorage.setItem("usas-did", v); updateMsg(); }
   };
   document.getElementById("did-clear").onclick = function() {
     localStorage.removeItem("usas-did");
     inp.value = "";
-    msg.textContent = "Cleared — using default.";
+    updateMsg();
   };
 })();
 
@@ -152,6 +165,12 @@ async function fetch1(id) {
   p2b.textContent = "—";
   chips.innerHTML = "";
   p2d.open = false;
+
+  if (!getDeviceId()) {
+    status(s1, "Missing Device-Id — paste yours in the panel above ↑", "err");
+    p1b.textContent = "No Device-Id configured.\n\nGet one from https://data.usaswimming.org/:\n  1. Log in, F12 → Network, filter: times-api\n  2. Open any athlete page\n  3. Click a times-api request, copy the Device-Id header\n  4. Paste it in the Device-Id panel above and click Save";
+    return;
+  }
 
   var url = API + "/GetBestTimesForMember/" + encodeURIComponent(id.trim());
   var hdrs = buildHeaders();
