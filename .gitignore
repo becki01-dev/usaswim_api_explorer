@@ -433,3 +433,6 @@ FodyWeavers.xsd
 *.key
 *.crt
 *.pfx
+
+# Sandbox — local research notes, not for GitHub
+sandbox/
