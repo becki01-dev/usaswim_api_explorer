@@ -17,7 +17,7 @@ you need to see the raw HTTP traffic.
 1. Get a Device-Id from [USA Swimming Data Hub](https://data.usaswimming.org/):
    - Log in → F12 → Network → filter `times-api`
    - Open any athlete page → click a `times-api` request → copy `Device-Id` header
-2. Open `api-explorer.html` in a browser — works from **anywhere** (GitHub Pages,
+2. Open `api-explorer.html` in a browser — works from anywhere (GitHub Pages,
    localhost, `file://`, Netlify, Vercel, etc.)
 3. Paste your Device-Id into the panel and click **Save**
 4. Paste a USA Swimming Member ID, hit **Look up**
@@ -35,40 +35,26 @@ public source code would:
 
 Each user should get their own from the Data Hub.
 
-## The Device-Id gate — investigation (updated 2026-07-13)
+## The Device-Id gate
 
-### Background
+### The only rule
 
-The API requires a `Device-Id` request header. The API returns 400 with
-`Invalid Device-Id format` when the value is unacceptable.
+The API requires a **valid `Device-Id`** header. That's it.
 
-### Observed behavior
+| Client | Device-Id | Result |
+|--------|-----------|--------|
+| Browser (any origin) | ✅ valid | ✅ 200 |
+| Browser (any origin) | ❌ expired/corrupt | ❌ 400 `Invalid Device-Id format` |
+| curl / scripts | ✅ valid | ✅ 200 |
+| curl / scripts | ❌ expired/corrupt | ❌ 400 `Invalid Device-Id format` |
 
-| Client | Origin | Result |
-|--------|--------|--------|
-| Real browser (Chrome) | `https://*.github.io` | ✅ 200 (with valid Device-Id) |
-| Real browser (Chrome) | `http://localhost:3000` | ✅ 200 (with valid Device-Id) |
-| Real browser (Chrome) | `file://` | ✅ 200 (with valid Device-Id) |
-| curl (all headers copied from browser) | (none) | ❌ 400 |
+No TLS fingerprint check. No Origin domain whitelist. No JA3/JA4 gate.
+Just a valid Device-Id.
 
-> **Earlier diagnosis was partially wrong.** The 400 errors on localhost and
-> `file://` were caused by an expired/corrupt Device-Id, not by the Origin
-> domain. With a fresh Device-Id from the Data Hub, the API accepts requests
-> from any origin. There is no domain whitelist.
-
-### Root cause: TLS fingerprint gate
-
-The API (behind Azure API Management) enforces a **TLS fingerprint (JA3/JA4)**
-check. Only real browser TLS handshakes pass. `curl`, Python `requests`,
-Node.js `fetch()` — all fail with 400 regardless of what HTTP headers they
-send, even with a valid Device-Id.
-
-### What this means for you
-
-- **Real browser + valid Device-Id:** Works from any origin — GitHub Pages,
-  localhost, `file://`, anything.
-- **curl / scripts / automation:** Dead end. Use a browser-automation tool
-  (Playwright, Puppeteer) that performs real TLS handshakes.
+> **Note:** An earlier version of this README described a "two-layer gate"
+> (TLS fingerprint + Origin domain). That diagnosis was wrong — it was based
+> entirely on tests with an expired Device-Id. With a valid Device-Id, every
+> client works from every origin.
 
 ## Related files
 
@@ -76,14 +62,14 @@ send, even with a valid Device-Id.
 |------|------|
 | `../lookup.js` | Main app's API client — same endpoints, same headers |
 | `../.tmp/usa-swimming-api.md` | Earlier API exploration notes |
-| `../.tmp/device-id-handoff.md` | Previous (partially incorrect) diagnosis |
+| `../.tmp/device-id-handoff.md` | Previous (incorrect) diagnosis |
 | `https-server.js` | Quick HTTPS server for testing (Node.js) |
 
 ## Test commands
 
 ```bash
-# These will all return 400 regardless of headers — TLS fingerprint gate.
-# Only a real browser works.
+# Works fine with a valid Device-Id — from any client, any origin.
+# Replace YOUR_DEVICE_ID_HERE with your actual Device-Id.
 
 # Phase 1 — list events for a member
 curl -s -w "\nHTTP %{http_code}" \
