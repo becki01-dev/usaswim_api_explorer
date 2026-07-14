@@ -60,9 +60,9 @@ Just a valid Device-Id.
 
 | File | Role |
 |------|------|
-| `../lookup.js` | Main app's API client — same endpoints, same headers |
-| `../.tmp/usa-swimming-api.md` | Earlier API exploration notes |
-| `../.tmp/device-id-handoff.md` | Previous (incorrect) diagnosis |
+| `../meetready/lookup.js` | Main app's API client — same endpoints, same headers |
+| `../meetready/.tmp/usa-swimming-api.md` | Earlier API exploration notes |
+| `../meetready/.tmp/device-id-handoff.md` | Previous (incorrect) diagnosis |
 | `https-server.js` | Quick HTTPS server for testing (Node.js) |
 
 ## Test commands
