@@ -14,14 +14,16 @@ you need to see the raw HTTP traffic.
 
 ## Quick start
 
-1. Deploy `api-explorer.html` to a **public HTTPS origin** (GitHub Pages, Netlify, Vercel, etc.)
-2. Get a Device-Id from [USA Swimming Data Hub](https://data.usaswimming.org/):
+1. Get a Device-Id from [USA Swimming Data Hub](https://data.usaswimming.org/):
    - Log in → F12 → Network → filter `times-api`
    - Open any athlete page → click a `times-api` request → copy `Device-Id` header
-3. Paste your Device-Id into the tool and click **Save**
+2. Open `api-explorer.html` in a browser — works from **anywhere** (GitHub Pages,
+   localhost, `file://`, Netlify, Vercel, etc.)
+3. Paste your Device-Id into the panel and click **Save**
 4. Paste a USA Swimming Member ID, hit **Look up**
 
-Localhost and `file://` will NOT work — the API requires a public HTTPS origin.
+The Device-Id is stored in `localStorage` under `usas-did`. It never appears
+in source code and never leaves your browser.
 
 ## Why no Device-Id is included in source
 
@@ -29,56 +31,44 @@ The Device-Id is tied to a real user session on the Data Hub. Including one in
 public source code would:
 
 - Expose it to abuse (it's your personal session token)
-- Break when the token expires (the one from MeetReady's public source already
-  returns "Invalid Device-Id format")
+- Break when the token expires
 
-Each user should get their own from the Data Hub. It's stored in `localStorage`
-under `usas-did` and never leaves your browser.
+Each user should get their own from the Data Hub.
 
-## The Device-Id gate — investigation
+## The Device-Id gate — investigation (updated 2026-07-13)
 
 ### Background
 
 The API requires a `Device-Id` request header. The API returns 400 with
-`Invalid Device-Id format` when the value is unacceptable — either because the
-token is expired/corrupt, or because the request comes from a non-browser TLS
-context.
+`Invalid Device-Id format` when the value is unacceptable.
 
 ### Observed behavior
 
 | Client | Origin | Result |
 |--------|--------|--------|
 | Real browser (Chrome) | `https://*.github.io` | ✅ 200 (with valid Device-Id) |
-| Real browser (Chrome) | `https://localhost:8443` (self-signed cert) | ❌ 400 |
-| Real browser (Chrome) | `http://localhost:3000` | ❌ 400 |
-| Real browser (Chrome) | `file://` | ❌ 500 |
+| Real browser (Chrome) | `http://localhost:3000` | ✅ 200 (with valid Device-Id) |
+| Real browser (Chrome) | `file://` | ✅ 200 (with valid Device-Id) |
 | curl (all headers copied from browser) | (none) | ❌ 400 |
-| curl + `Origin: https://d4f-gif.github.io` | (none) | ❌ 400 |
-| curl + all browser headers verbatim | (none) | ❌ 400 |
 
-### Root cause: two-layer gate
+> **Earlier diagnosis was partially wrong.** The 400 errors on localhost and
+> `file://` were caused by an expired/corrupt Device-Id, not by the Origin
+> domain. With a fresh Device-Id from the Data Hub, the API accepts requests
+> from any origin. There is no domain whitelist.
 
-The API (behind Azure API Management) enforces two independent checks:
+### Root cause: TLS fingerprint gate
 
-1. **TLS fingerprint (JA3/JA4).** Only real browser TLS handshakes pass.
-   `curl`, Python `requests`, Node.js `fetch()` — all fail regardless of
-   what HTTP headers they send.
-
-2. **Origin domain.** The request must originate from a public HTTPS domain.
-   `localhost` and `file://` are rejected even from a real browser.
-
-3. **Device-Id validity.** The API now actively validates the Device-Id format.
-   Old/corrupted tokens return `Invalid Device-Id format`.
+The API (behind Azure API Management) enforces a **TLS fingerprint (JA3/JA4)**
+check. Only real browser TLS handshakes pass. `curl`, Python `requests`,
+Node.js `fetch()` — all fail with 400 regardless of what HTTP headers they
+send, even with a valid Device-Id.
 
 ### What this means for you
 
-- **curl / scripts / automation:** Dead end. You cannot bypass the TLS
-  fingerprint check. Use a real browser or a browser-automation tool
+- **Real browser + valid Device-Id:** Works from any origin — GitHub Pages,
+  localhost, `file://`, anything.
+- **curl / scripts / automation:** Dead end. Use a browser-automation tool
   (Playwright, Puppeteer) that performs real TLS handshakes.
-- **localhost dev:** Will get 400. The page works structurally, but you'll
-  need a fresh Device-Id from the Data Hub.
-- **GitHub Pages / Netlify / Vercel:** Works — real browser + real domain +
-  valid Device-Id = success.
 
 ## Related files
 
@@ -93,7 +83,7 @@ The API (behind Azure API Management) enforces two independent checks:
 
 ```bash
 # These will all return 400 regardless of headers — TLS fingerprint gate.
-# Only a real browser from a public HTTPS origin works.
+# Only a real browser works.
 
 # Phase 1 — list events for a member
 curl -s -w "\nHTTP %{http_code}" \
