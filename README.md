@@ -106,7 +106,7 @@ curl -s -w "\nHTTP %{http_code}" \
   -X GET "https://times-api.usaswimming.org/swims/TimesSearch/GetBestTimesForMember/9688AB9C4AFF4B" \
   -H "AppName: DataHub" \
   -H "Usas-Sub-Id: Anonymous" \
-  -H "Device-Id: cGxhdGZvcm0gLSBcGxhd2ZWbmRvciAtIHVua25vd24gLSAxNzUxNzI0MDAwMDAwMA==" \
+  -H "Device-Id: cGxhdGZvcm0gLSBcGxhd2V5kb3IgLSB1bmtub3duIC0gMTc1MTcyNDAwMDAwMA==" \
   -H "Content-Type: application/json"
 
 # Phase 2 — best times for 100 Free
@@ -114,7 +114,7 @@ curl -s -w "\nHTTP %{http_code}" \
   -X POST "https://times-api.usaswimming.org/swims/TimesSearch/BestTimes" \
   -H "AppName: DataHub" \
   -H "Usas-Sub-Id: Anonymous" \
-  -H "Device-Id: cGxhdGZvcm0gLSBcGxhd2ZWbmRvciAtIHVua25vd24gLSAxNzUxNzI0MDAwMDAwMA==" \
+  -H "Device-Id: cGxhdGZvcm0gLSBcGxhd2V5kb3IgLSB1bmtub3duIC0gMTc1MTcyNDAwMDAwMA==" \
   -H "Content-Type: application/json" \
   -d '{"memberId":"9688AB9C4AFF4B","distance":100,"strokeAbbreviation":"FR"}'
 ```
